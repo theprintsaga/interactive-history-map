@@ -1,0 +1,1787 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Mythology Map</title>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body, html { margin: 0; padding: 0; }
+    #map { height: 100vh; width: 100%; }
+
+    #popup-container {
+      font-family: 'Playfair Display', serif;
+      font-weight: 300;
+      font-size: 1.1em;
+      line-height: 1.4;
+      text-align: left;
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      width: 300px;
+      height: 400px;
+      padding: 15px;
+      background-size: cover;
+      background-position: center;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      display: none;
+      overflow-y: auto;
+    }
+
+    #popup-container::-webkit-scrollbar {
+      display: none; /* Chrome, Safari */
+    }
+
+    #popup-container {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+    }
+
+    #popup-container h3 {
+      margin: 0 0 10px;
+      font-size: 1.2em;
+    }
+
+    #popup-container ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    #popup-container ul li {
+      margin-bottom: 5px;
+    }
+
+  /* Custom Styles to target Mapbox Popup */
+  .mapboxgl-popup-content {
+    background: rgba(0, 0, 0, 0.8) !important; /* Ensures no white background */
+    color: white;
+    padding: 10px;
+    border-radius: 12px;
+    width: 100px;
+    text-align: center;
+    font-family: 'Cinzel', serif;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 1);
+    max-height: 200px;
+    overflow: hidden; /* Ensure no scrollbar appears */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    border: none;
+    position: relative;
+}
+
+/* General Style for Mapbox Popup Arrow */
+.mapboxgl-popup-tip {
+    background: transparent !important; /* Remove any default background */
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    box-shadow: none !important;
+}
+
+/* Default Arrow for Bottom Popup (when popup is above the marker) */
+.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip {
+    display: block !important;
+    border-top: 10px solid rgba(0, 0, 0, 0.8) !important; /* Custom black transparent arrow */
+    border-bottom: none;
+}
+
+/* Hide the arrow when the popup is at the top (above the marker) */
+.mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
+    display: none !important;
+}
+
+/* Custom Arrow for the Top Popup (when popup is below the marker) */
+.mapboxgl-popup-anchor-top .mapboxgl-popup-tip {
+    display: block !important;
+    border-top: none;
+    border-bottom: 10px solid rgba(0, 0, 0, 0.8) !important; /* Custom black transparent arrow */
+}
+
+/* Character Popup Text Styling */
+.character-popup h3 {
+  color: #FFD700;
+  font-size: 1.5em;
+  margin-bottom: 20px;
+}
+
+.character-popup a {
+  color: #FFFFFF;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.character-popup a:last-of-type {
+  color: #FFD700; /* Different color for Shop Art link */
+}
+
+.speech-icon {
+  position: absolute; /* or relative if needed */
+  top: 82px;
+  right: 80px;
+  font-size: 40px;
+  z-index: 1000; /* Ensure it appears above other elements */
+  cursor: pointer;
+  pointer-events: auto; /* Make sure clicks are allowed */
+}
+
+/* Hide the checkbox but keep it functional */
+.hidden-toggle {
+  display: none;
+}
+
+/* Container to hold the toggle button */
+.toggle-container {
+  position: absolute;
+  top: 1px;
+  right: 10px;
+  z-index: 1000; /* Ensure it's on top of other elements */
+}
+
+/* Scroll Icon (Default state - OFF) */
+.scroll-icon {
+  width: 100px;  /* Normal size of the icon */
+  height: 100px;
+  background-image: url('https://res.cloudinary.com/dwgeznr2w/image/upload/v1740072025/historytogglemapicon_u0afql.svg');  /* Default OFF state image */
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  transition: background-image 0.3s ease-in-out; /* Smooth transition between images */
+}
+
+/* When toggled ON, change to ON state image */
+#toggle-history-btn:checked + .scroll-label .scroll-icon {
+  background-image: url('https://res.cloudinary.com/dwgeznr2w/image/upload/v1740072025/historytogglemapicon_u0afql.svg');  /* ON state image */
+}
+
+/* Scroll Icon (Hovered state) */
+.scroll-icon:hover {
+  cursor: pointer;
+}
+
+  </style>
+</head>
+<body>
+<div class="toggle-container">
+  <input type="checkbox" id="toggle-history-btn" class="hidden-toggle">
+  <label for="toggle-history-btn" class="scroll-label">
+    <div class="scroll-icon"></div>
+  </label>
+</div>
+<div id="map"></div>
+<div id="popup-container"></div>
+
+<script>
+  mapboxgl.accessToken = 'pk.eyJ1IjoidGhlcHJpbnRzYWdhIiwiYSI6ImNtNXljeGNhbjBidDAybG14b2d2YmQ3MXAifQ.pA3o4mIVYMqhQZDtOXDZJw';
+
+  const map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/satellite-v9',
+    center: [0, 20],
+    zoom: 2
+  });
+
+map.on('load', () => {
+      // Set galaxy-like fog effect (without the galaxy texture)
+      map.setFog({
+        range: [-1, 3], // Range of fog blending
+        color: 'rgba(0, 0, 0, 0.8)', // Dark galaxy-like color
+        "horizon-blend": 0.5, // Blend intensity at the horizon
+        "star-intensity": 0.2, // Add faint starry effect
+      });
+  });
+
+  const mythologyGeoJSON = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: {
+          mythology: "Norse Mythology",
+                introduction: "In the icy expanse of the North, the gods of Asgard prepare for the inevitable- (Ragnarok), the twilight of the gods. Odin, the all-seeing, peers into the Well of Mímir, his one good eye burning with visions of fire and frost as the great wolf Fenrir snaps his jaws around the sky itself. Thor, with his hammer Mjolnir, trains for a battle he knows he cannot win. Loki, bound by the weight of his mischief, awaits his freedom to bring chaos. Yet, among all the destruction foretold, whispers speak of a world reborn. Could the end truly be a beginning?",
+                historicalEvidence: [
+"Archaeological Finds: The Vikings left behind runestones, burial mounds, and artifacts that offer insight into Norse beliefs, such as the Oseberg Ship in Norway (9th century), which features intricate carvings depicting gods and mythological scenes.",
+"Textual Evidence: The Poetic Edda and Prose Edda (13th century) are the most significant sources, preserving Norse myths, including the tales of Odin, Thor, Loki, and Ragnarok. These were written down by Icelandic scholars, preserving oral traditions."
+],
+                funFacts: [
+                    "Wednesday is named after Odin (Woden’s Day), and Thursday after Thor (Thor’s Day).",
+                    "Loki once turned into a mare and gave birth to an eight-legged horse named Sleipnir.",
+                    "The Bifröst bridge connecting Asgard and Midgard is often described as a rainbow.",
+                    "Vikings believed in Valhalla, where fallen warriors feasted endlessly in Odin’s hall.",
+                    "Ragnarok is prophesied to end with the rebirth of the world and two surviving humans."
+                ],
+                icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737436318/norsemythologymapicon_ap3abb.svg", // Custom icon for Norse
+                popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744200/norsemythologycontainerbackground_eqpaiq.svg" // Custom background for Norse popup
+            },
+            geometry: { type: "Point", coordinates: [7.1, 61] } // Norway
+        },
+        {
+            type: "Feature",
+            properties: {
+                mythology: "Roman Mythology",
+                introduction: "From the bustling streets of Rome to the vast empire it forged, Roman mythology reshapes ancient Greek tales with its own fierce ambition. Gods like Jupiter, Venus, and Mars wield power, inspiring awe and fear, while mortals strive to carve their place in destiny. Yet these myths are more than borrowed tales – they reveal Rome’s hunger for greatness, intertwining conquest and divine favor. Could Rome’s myths have been a prophecy of its own rise and fall?",
+                historicalEvidence: [
+"Archaeological Finds: Roman temples and frescoes (e.g., the House of the Vettii in Pompeii) provide visual evidence of Roman gods. Statues of deities like Jupiter and Mars were common in Roman homes and public spaces.",
+"Textual Evidence: Roman authors such as Virgil (in the Aeneid) and Ovid (in the Metamorphoses) were instrumental in preserving Roman myths, particularly in their retelling of Greek stories."
+],
+                funFacts: [
+                    "Janus, the two-faced god, symbolized beginnings and endings and inspired the name for January.",
+                    "The festival of Saturnalia inspired many traditions of modern Christmas.",
+                    "Roman mythology heavily adopted Greek deities but gave them distinct Roman characteristics (e.g., Zeus became Jupiter).",
+                    "Cupid, the Roman god of love, was depicted as both a mischievous child and a powerful force.",
+                    "Romulus and Remus, founders of Rome, were said to have been raised by a she-wolf."
+                ],
+                image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+                icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738292954/romanmythologymapicon_lv1rcm.svg",
+                popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744279/romanmythologycontainerbackground_efsjza.svg"
+            },
+            geometry: { type: "Point", coordinates: [14.47, 41.56] }
+        },
+        {
+            type: "Feature",
+            properties: {
+                mythology: "Greek Mythology",
+                introduction: "On the peak of Mount Olympus, Zeus, the king of the gods, throws a thunderbolt into the heavens, warning both mortals and immortals alike of his wrath. In the mortal world, heroes like Achilles and Odysseus venture into the unknown, tempted by glory but haunted by fate. The Oracle at Delphi mutters riddles of doom, her cryptic warnings driving kings and warriors mad. Yet, even the gods fear the Fates—those three sisters spinning the threads of destiny. Can even Zeus escape the thread that binds his own end?",
+                historicalEvidence: [
+"Archaeological Finds: Temples, statues, and pottery often depict Greek gods and mythological scenes. The ruins of the Temple of Zeus at Olympia and the Parthenon in Athens are prime examples.",
+"Textual Evidence: Greek texts such as Homer's Iliad and Odyssey, Hesiod's Theogony, and works by later historians like Herodotus provide rich accounts of Greek gods, heroes, and mythological events."
+],
+                funFacts: [
+                    "Athena was born fully grown and armored from Zeus’s forehead after he swallowed her mother, Metis.",
+                    "Hades’ helm of invisibility was a key weapon in the Titanomachy, the battle of the gods against the Titans.",
+                    "The Trojan War started because of a golden apple labeled 'To the Fairest', leading to a fight among goddesses.",
+                    "Dionysus, the god of wine, was the last Olympian to be added to the pantheon.",
+                    "Medusa’s head was used by Perseus to turn the sea monster Cetus into stone."
+                ],
+                image: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Zeus_Otricoli_Pio-Clementino_Inv257.jpg/512px-Zeus_Otricoli_Pio-Clementino_Inv257.jpg",
+                icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738291678/greekmythologymapicon_atqpxp.svg",
+                popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744179/greekmythologycontainerbackground_ofu94j.svg"
+            },
+            geometry: { type: "Point", coordinates: [21.573226050516134, 38.82167265588951] }
+        },
+        {  
+            type: "Feature",
+            properties: {
+                mythology: "Celtic Mythology",
+                introduction: "Deep in the mists of ancient forests, the Tuatha Dé Danann, children of the goddess Danu, prepare to defend their sacred lands against invading forces. Brigid, goddess of poetry, stands beneath the stars, her fiery light illuminating their fate. Across the battlefield, the Morrigan, the three-faced goddess of war, shifts between her forms, foretelling death with the cry of a raven. But as the druids speak of heroes returning from the Otherworld, one question lingers: will the Sidhe—the fae—help mankind, or will they let their magic fade forever?",
+                historicalEvidence: [
+"Archaeological Finds: The Celts left a rich record of art, including La Tène artifacts, which depict mythical creatures and deities. The Book of Kells (8th century) is one of the most famous Celtic texts, although not primarily mythological, it features religious imagery linked to Celtic deities.",
+"Textual Evidence: The Mabinogion, a collection of Welsh folklore from the 12th century, and the writings of Julius Caesar and other Roman authors also mention the Celtic gods and their practices."
+],
+                funFacts: [
+                    "The Celtic god Lugh was said to be a master of all crafts, earning the nickname 'The Long Arm'.",
+                    "Celtic warriors often went into battle naked, believing it granted them divine protection.",
+                    "Samhain, the precursor to Halloween, was a Celtic festival marking the new year.",
+                    "Druids, Celtic priests, were believed to communicate with gods through oak trees and mistletoe.",
+                    "Cernunnos, the horned god, symbolized life, death, and rebirth, making him a central figure in nature worship."
+                ],
+                image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+                icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737435936/celticmythologymapicon_acrhbw.svg",
+                popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744160/celticmythologycontainerbackground_yomxcw.svg"
+            },
+            geometry: { type: "Point", coordinates: [-7.5, 54.5] }
+        },
+        {  
+            type: "Feature",
+            properties: {
+                mythology: "Egyptian Mythology",
+                introduction: "Under the blazing desert sun, Ra, the sun god, sails across the sky, descending each night into the underworld to battle the serpent Ahpep. Osiris, lord of the dead, lies dismembered, awaiting resurrection, while his son Horus sharpens his falcon claws to seek revenge against Set, the god of chaos. But amid the cycles of death and rebirth, one question remains unanswered: who will truly rule the balance between order and chaos when the gods themselves seem destined to fall?",
+                historicalEvidence: [
+"Archaeological Finds: The pyramids, tombs, and temples of ancient Egypt are full of inscriptions and artwork that reference Egyptian gods like Ra, Osiris, and Anubis. The Book of the Dead and the Pyramid Texts offer further information on the afterlife and gods.",
+"Textual Evidence: Religious texts like the Coffin Texts and Temple Hymns offer deep insight into Egyptian religious beliefs, while The Pyramid Texts detail rituals and divine stories."
+],
+                funFacts: [
+                    "The Great Pyramid of Giza aligns perfectly with the cardinal points and may reflect ancient celestial beliefs.",
+                    "Ra, the sun god, traveled through the underworld each night to be reborn at dawn.",
+                    "Cats were sacred in Egypt because they were associated with the goddess Bastet, protector of home and family.",
+                    "Osiris, god of the afterlife, was killed and dismembered by his brother Set, then reassembled by Isis.",
+                    "The Egyptian calendar was based on the annual flooding of the Nile."
+                ],
+                image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+                icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738427777/egyptianmythologymapicon_uzdmfl.svg",
+                popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744173/egyptianmythologycontainerbackground_mcpymv.svg"
+            },
+            geometry: { type: "Point", coordinates: [27.2, 26.5] }
+        },
+        {
+    type: "Feature",
+    properties: {
+      mythology: "Hindu Mythology",
+      introduction: "Vast and infinite, Hindu mythology is a cosmic symphony where gods, demons, and mortals partake in an eternal dance of creation, preservation, and destruction. Brahma breathes life, Vishnu guards existence, and Shiva wields the power to end all things. Yet within these cycles of reincarnation lies a quest for moksha – ultimate liberation. What profound mysteries of existence are buried within these ancient Vedic tales?",
+      historicalEvidence: [
+"Archaeological Finds: Ancient temples dedicated to gods like Vishnu, Shiva, and Durga (e.g., the Kailasa Temple in Ellora and Kandariya Mahadeva Temple in Khajuraho) depict scenes from Hindu mythology.",
+"Textual Evidence: Hindu mythology is preserved in texts like the Mahabharata, Ramayana, and Puranas. These epics contain stories of gods, demons, and heroic figures, deeply influencing Hindu culture and rituals."
+],
+      funFacts: [
+          "The Mahabharata, one of Hinduism’s great epics, is over 1.8 million words long—ten times the length of The Iliad and The Odyssey combined.",
+          "Hindu mythology features over 330 million gods and goddesses, symbolizing various aspects of the cosmos.",
+          "Many Hindu deities have multiple forms and stories associated with them, reflecting the complex and diverse nature of the tradition.",
+          "Shiva is often depicted meditating in the Himalayas, symbolizing his role as the destroyer of ignorance.",
+          "The Ganges River is personified as the goddess Ganga and is considered sacred by millions."
+      ],
+      image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+      icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737436189/hindumythologymapicon_ymzasl.svg",
+      popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744185/hindumythologycontainerbackground_gfwbwk.svg"
+          },
+          geometry: { type: "Point", coordinates: [80.91350711912513, 21.177534783819308] }
+      },
+      {
+    type: "Feature",
+    properties: {
+      mythology: "Chinese Mythology",
+      introduction: "From the celestial palaces of the Jade Emperor to the fiery wrath of the Dragon Kings, Chinese mythology spans the heavens and earth. It tells of Pangu, the giant who split chaos into sky and land, and Nüwa, who molded humanity from clay. But the celestial bureaucracy, monstrous beasts, and immortal beings hint at something deeper – a delicate balance between order and chaos. What timeless wisdom lies in these enchanting stories, passed down through dynasties?",
+      historicalEvidence: [
+"Archaeological Finds: The Tomb of the First Emperor (Qin Shi Huang) contains artifacts like the Terracotta Army that reflect mythical beliefs about immortality and gods.",
+"Textual Evidence: Ancient Chinese texts such as the Classic of Mountains and Seas (Shan Hai Jing) provide accounts of deities, mythical creatures, and cosmic events. The Records of the Grand Historian by Sima Qian also details Chinese mythological and historical figures."
+],
+      funFacts: [
+"The Chinese zodiac, made up of 12 animals, is a prominent feature in Chinese mythology, with each animal representing certain traits and playing a role in the annual cycle.",
+"The Jade Emperor ruled the heavens and organized the Chinese zodiac animals based on a legendary race.",
+"The Monkey King, Sun Wukong, gained immortality multiple times through trickery and determination.",
+"Dragons in Chinese mythology were benevolent and symbolized power, rain, and prosperity.",
+"The myth of Nuwa and Fuxi tells of siblings who created humanity after a great flood."
+],
+      image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+      icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738291575/chinesemythologymapicon_dw5ue0.svg",
+      popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744166/chinesemythologycontainerbackground_l0zm8q.svg"
+    },
+    "geometry": { type: "Point", coordinates: [110, 32] }
+  },
+  {
+    type: "Feature",
+    properties: {
+      mythology: "Japanese Mythology",
+      introduction: "Japanese mythology begins with the divine siblings Izanagi and Izanami, whose union created the islands of Japan. Yet tragedy struck when death claimed Izanami, leading Izanagi to the underworld in a tale of loss and renewal. From the radiant Amaterasu to the stormy Susanoo, these gods embody forces of nature and human emotion. But hidden within these ancient myths is a lesson in resilience, honor, and harmony. What can the kami (spirits) teach us about life’s delicate balance?",
+      historicalEvidence: [
+"Archaeological Finds: Ancient Japanese shrines like the Ise Shrine contain relics that show reverence to deities like Amaterasu and Susanoo. The Kofun period tombs feature symbolic representations of these gods.",
+"Textual Evidence: The Kojiki and Nihon Shoki are Japanese historical texts that record myths about the creation of Japan, the gods, and legendary heroes."
+],
+      funFacts: [
+"Amaterasu, the sun goddess, once hid in a cave, plunging the world into darkness until other gods coaxed her out.",
+"The first emperor of Japan was said to be a direct descendant of Amaterasu.",
+"The kami (spirits) are central to Shinto beliefs, embodying natural forces and ancestors.",
+"Susanoo, the storm god, slew the eight-headed serpent Orochi and found a legendary sword in its tail.",
+"Torii gates mark the transition between the mundane world and sacred spaces in Japanese shrines."
+],
+      image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+      icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738291933/japanesemythologymapicon_hm077i.svg",
+      popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744192/japanesemythologycontainerbackground_fxf11n.svg"
+    },
+    "geometry": { type: "Point", coordinates: [137.6281212342008, 36.26341296192262] }
+  },
+  {
+    type: "Feature",
+    properties: {
+      mythology: "Sumerian Mythology",
+      introduction: "Born from the cradle of civilization in Mesopotamia, Sumerian mythology speaks of gods who crafted the world from primordial chaos. Enlil commands the winds, while Inanna, goddess of love and war, dances between creation and destruction. Yet the story of humanity begins with a rebellion – a defiance of the divine order that sparks epic floods and legendary kings. What ancient truths linger in these stories, hidden in clay tablets etched with humanity’s first words?",
+      historicalEvidence: [
+"Archaeological Finds: The ancient ruins of Sumerian cities like Ur and Nippur have provided a wealth of tablets inscribed with cuneiform writing. Artifacts such as the Standard of Ur and Ziggurats feature scenes that align with Sumerian myths.",
+"Textual Evidence: The Epic of Gilgamesh, one of the oldest literary works, describes the adventures of the hero-king Gilgamesh, interacting with gods and seeking immortality. The Enuma Elish is another key mythological text."
+],
+      funFacts: [
+"The Sumerians believed the world emerged from a primordial sea called Nammu.",
+"Inanna descended into the underworld and stripped away her power to face her sister Ereshkigal.",
+"Enki, god of wisdom and water, was said to have taught humans the arts of civilization.",
+"Ziggurats were built as homes for the gods, with priests climbing their steps to offer prayers.",
+"The Sumerian creation myth, Enuma Elish, influenced later mythologies, including the Babylonian and Hebrew texts."
+],
+      image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+      icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737436402/sumerianmythologymapicon_pqausp.svg",
+      popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744290/sumerianmythologycontainerbackground_hezbf0.svg"
+    },
+    geometry: { type: "Point", coordinates: [48.2, 32.2] }
+  },
+  {
+    type: "Feature",
+    properties: {
+      mythology: "Polynesian Mythology",
+      introduction: "Carried by the tides across vast oceans, Polynesian mythology tells of creation, navigation, and gods who shaped the islands. Maui, the trickster demigod, fished up entire archipelagos, while Pele, goddess of volcanoes, sculpted the land with fire. Yet beneath these tales of bold adventure lies an intricate connection between people and nature. Could these ancient seafarers have left clues to navigating not just the seas, but life itself?",
+      historicalEvidence: [
+"Archaeological Finds: Ancient Polynesian artifacts, such as the Moai statues of Easter Island and traditional carvings in wood and stone, often depict deities and mythological stories.",
+"Textual Evidence: Oral traditions, including chants and songs, were recorded by early European explorers and missionaries. These oral histories are central to Polynesian mythology, with gods like Tangaroa and Maui being commonly referenced."
+],
+      funFacts: [
+"Polynesian navigators used their understanding of the stars and ocean currents to explore vast distances across the Pacific, which is reflected in their myths.",
+"Pele, goddess of volcanoes, is said to reside in Hawaii’s Kilauea volcano.",
+"Tangaroa, god of the sea, is one of the central deities in Polynesian creation myths.",
+"Maui, a demigod, slowed the sun with a lasso to make days longer for humanity.",
+"Polynesian tattoos were considered sacred and often symbolized ancestry or spiritual beliefs."
+],
+      image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+      icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738292874/polynesianmythologymapicon_il0jzd.svg",
+      popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744208/polynesianmythologycontainerbackground_zndnou.svg"
+    },
+    geometry: { type: "Point", coordinates: [-159.35399246132317, 18.253843234489437] }
+  },
+  {
+  type: "Feature",
+  properties: {
+    mythology: "Mayan Mythology",
+    introduction: "Amid the dense jungles of Mesoamerica, Mayan mythology reveals a world shaped by gods who struggled to create humankind. From the Hero Twins’ descent into the underworld to the gods’ crafting of man from maize, these stories intertwine with the stars and time itself. Yet the Mayan calendar hints at something deeper – a cyclical view of existence, far beyond mortal comprehension. What hidden knowledge of time and destiny lies within these ancient glyphs?",
+    historicalEvidence: [
+"Archaeological Finds: Mayan temples and stelae, like those at Palenque and Tikal, contain carvings and inscriptions of gods and mythological figures. The Popol Vuh, the Mayan creation myth, is often referenced in these findings.",
+"Textual Evidence: The Popol Vuh (the Mayan 'Book of the Community') and Chilam Balam are central texts that outline the Mayan creation myths and the stories of gods like Itzamna, Kukulkan, and Hun Hunahpu."
+],
+    funFacts: [
+"The Popol Vuh tells of the Hero Twins, who defeated the lords of the underworld through wit and strategy",
+"The Mayans believed the world was created and destroyed multiple times before our current era",
+"Kukulkan, the feathered serpent god, was celebrated at Chichen Itza during the equinoxes",
+"The Mayan calendar was so precise it could predict celestial events thousands of years in advance",
+"Chaac, the rain god, was often depicted wielding an axe to split the clouds and bring rain"
+],
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+    icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738291982/mayanmythologymapicon_knz4lf.svg",
+    popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744200/mayanmythologycontainerbackground_zu7r98.svg"
+  },
+  geometry: { type: "Point", coordinates: [-89, 19.7] }
+},
+{
+  type: "Feature",
+  properties: {
+    mythology: "Aztec Mythology",
+    introduction: "In the shadow of towering temples, Aztec mythology tells of gods who sacrificed themselves to create the sun and sustain humanity. Quetzalcoatl, the feathered serpent, offers wisdom, while Huitzilopochtli demands blood to fuel the cosmos. Their world teeters on the brink of collapse, forever caught between life and death. What truths about sacrifice and balance did the Aztecs leave inscribed in their sacred stones?",
+    historicalEvidence: [
+"Archaeological Finds: The ruins of Tenochtitlán and other Aztec cities, along with artifacts such as the Sun Stone (Aztec calendar stone), depict Aztec gods like Quetzalcoatl and Tezcatlipoca.",
+"Textual Evidence: The Florentine Codex, compiled by the Franciscan friar Bernardino de Sahagún, is a key document that describes Aztec deities, rituals, and mythology."
+],
+    funFacts: [
+"The Aztecs believed their world was the fifth creation, with the previous four worlds destroyed by cataclysmic events.",
+"Quetzalcoatl, the feathered serpent, was a god of wind, learning, and creation.",
+"Human sacrifices were offered to ensure the sun continued to rise and nourish the world.",
+"Huitzilopochtli, the war god, was born fully armed after his mother swallowed a ball of feathers.",
+"The Aztecs revered the maguey plant, attributing its discovery to the goddess Mayahuel."
+],
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+    icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738289942/aztecmythologymapicon_qrl2vu.svg",
+    popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1737744132/aztecmythologycontainerbackground_ljeonm.svg"
+  },
+  geometry: { type: "Point", coordinates: [-101.11614400271468, 21.889150114831825] }
+   },
+{
+  type: "Feature",
+  properties: {
+    mythology: "Slavic Mythology",
+    introduction: "Slavic mythology is a rich and mysterious tapestry of ancient beliefs, filled with powerful gods, nature spirits, and supernatural beings that shaped the worldview of early Slavs. From Perun, the thunder god who ruled the heavens, to Veles, the cunning deity of the underworld, the Slavic pantheon reflects a deep connection to nature and the eternal struggle between order and chaos. Unlike many mythologies with well-preserved texts, Slavic myths were passed down orally, surviving through folklore, medieval chronicles, and archaeological discoveries. Even today, echoes of these ancient legends persist in Slavic traditions, fairy tales, and even modern pop culture. But with so much lost to time, one question remains—what forgotten myths of the Slavs are still waiting to be uncovered?",
+    historicalEvidence: [
+"Archaeological Findings: Excavations in Eastern Europe have uncovered idols and shrines dedicated to Slavic deities. One famous example is the Zbruch Idol, a four-sided stone sculpture found in Ukraine, depicting a multi-faced god, believed to represent the Slavic pantheon.",
+"Medieval Chronicles: The Primary Chronicle (Nestor’s Chronicle), written in the 12th century, describes the gods worshiped by the Kievan Rus, including Perun, Veles, and Dazhbog. It also records the Christianization of the Slavic peoples, which led to the suppression of their pagan beliefs."
+],
+    funFacts: [
+"Slavic mythology has no single 'holy book' – Unlike Norse or Greek mythology, it was entirely oral, making its reconstruction a puzzle for historians.",
+"Baba Yaga is both a villain and a helper – The famous witch of Slavic folklore sometimes aids heroes, but she is also feared for her gruesome habits.",
+"Slavic myths influenced modern pop culture – Many modern fantasy stories, video games, and TV shows borrow from Slavic mythology, such as The Witcher series, which includes creatures from Slavic folklore.",
+"Some Slavic spirits are tied to real-world dangers – The Rusalka, a water spirit, is often linked to the dangers of drowning, serving as a warning to stay away from deep waters.",
+"The Slavic underworld, Nav, was not necessarily a place of punishment – Unlike the Christian Hell, Nav was the realm of the dead but was not associated with eternal suffering."
+],
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+    icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740514350/slavicmythologymapicon_vybusu.svg",
+    popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740518959/slavicmythologypopupbackground_gk6s9o.svg"
+  },
+  geometry: { type: "Point", coordinates: [35.73160965122056, 56.75468393807972] }
+   },
+{
+  type: "Feature",
+  properties: {
+    mythology: "Biblical History",
+    introduction: "Biblical history is not just an ancient tale; it is the story of humanity’s search for meaning, purpose, and connection to something greater than itself. Spanning thousands of years, the Bible tells of powerful civilizations, courageous individuals, and extraordinary events that continue to shape the world today. At its core, it’s a record of how people encountered the divine, wrestled with their own flaws, and sought redemption through both personal transformation and divine intervention. For millions, the Bible is a spiritual guide—offering stories of faith, moral challenges, and promises of hope. It speaks of kings and prophets, battles and exiles, and a divine plan to restore humanity. But it is also a rich historical document, providing us with glimpses into ancient cultures, kingdoms, and the intricate relationships between humans and the gods they believed in. From the great Egyptian empire to the rise of Rome, biblical history offers a fascinating look at the events that helped shape our modern world.",
+historicalEvidence: [
+  "Jericho – Excavations show evidence of a sudden destruction around 1400 BC, which aligns with the biblical account in Joshua 6.",
+"Nineveh – The ruins of this Assyrian capital, mentioned in Jonah and Nahum, were discovered in modern-day Iraq.",
+"Sodom and Gomorrah – Excavations at Tall el-Hammam suggest a city was destroyed by a sudden, intense event, possibly linked to Genesis 19.",
+"The Pool of Siloam – Discovered in Jerusalem in 2004, it matches the location in John 9:7, where Jesus healed a blind man.",
+"The City of David – Archaeological finds confirm King David's rule, including inscriptions and fortifications.",
+"The Tel Dan Stele (9th Century BC) – The earliest known reference to the 'House of David,' proving his historical existence.",
+"The Mesha Stele (Moabite Stone, 840 BC) – Mentions King Omri of Israel and supports events in 2 Kings 3.",
+"The Pilate Stone (1st Century AD) – Confirms the existence of Pontius Pilate, the Roman governor who sentenced Jesus to death (Matthew 27:26).",
+"The Dead Sea Scrolls (3rd Century BC – 1st Century AD) – Contain some of the oldest biblical manuscripts, proving textual accuracy over time.",
+"Caiaphas Ossuary (1st Century AD) – A burial box inscribed with the name of Caiaphas, the high priest who condemned Jesus."
+],
+    funFacts: [
+"Ancient Laws: The Ten Commandments share similarities with the Code of Hammurabi, one of the oldest legal codes from ancient Babylon.",
+"Languages of the Bible: The Old Testament was primarily written in Hebrew, while parts of Daniel and Ezra are in Aramaic. The New Testament was written in Greek.",
+"Longest Lifespan: Methuselah, the oldest person recorded in the Bible, lived 969 years (Genesis 5:27).",
+"The Flood Story: Other ancient cultures, like the Sumerians and Babylonians, have flood myths similar to Noah’s story, such as the Epic of Gilgamesh.",
+"The Bible and Astronomy: The Star of Bethlehem, guiding the Wise Men, is thought by some scholars to have been a rare planetary conjunction or a supernova."
+],
+    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/96/Odin_by_Johannes_Gehrts.jpg/512px-Odin_by_Johannes_Gehrts.jpg",
+    icon: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1743454002/biblicalhistoryscrollmapicon_qfzipq.svg",
+    popupBgImage: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1741110272/biblicalhistorypopupcontainerimage_sl514y.svg"
+  },
+  geometry: { type: "Point", coordinates: [34.979947208377276, 31.727308367830847] }
+   }
+  ]
+}
+
+let characterMarkers = [];
+let mythologyClicked = false;
+
+const popupContainer = document.getElementById('popup-container'); 
+
+let currentSpeech = null;
+
+function speakText(text, voiceType = "Google UK English Female") {
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel(); // Stop any ongoing speech
+
+    const speech = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+
+    let selectedVoice = voices.find(voice => voice.name === voiceType);
+    if (!selectedVoice) selectedVoice = voices.find(voice => voice.lang === "en-GB") || voices[0];
+
+    speech.voice = selectedVoice;
+    speech.lang = selectedVoice.lang || "en-GB";
+    speech.pitch = 1.1;
+    speech.rate = 1;
+
+    // Split the text into sentences or paragraphs
+    const textChunks = text.split('.');
+
+    let currentChunk = 0;
+
+    function speakNext() {
+      if (currentChunk < textChunks.length) {
+        speech.text = textChunks[currentChunk].trim() + '.';
+        console.log("Speaking chunk:", speech.text);
+        window.speechSynthesis.speak(speech);
+        currentChunk++;
+      }
+    }
+
+    currentSpeech = speech;
+
+    speech.onstart = () => {
+      changeIconToMute();
+    };
+
+    speech.onend = function () {
+      speakNext(); // Proceed to the next chunk
+      changeIconToUnmute(); // Change the icon back to unmute
+    };
+
+    window.speechSynthesis.speak(speech);
+  } else {
+    alert("Sorry, your browser doesn't support text-to-speech.");
+  }
+}
+
+function escapeText(text) {
+  return text.replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+function changeIconToMute() {
+  const icon = document.querySelector('.speech-icon');
+  if (icon) {
+    icon.innerHTML = '🔊'; // Change to mute icon
+    icon.setAttribute('onclick', 'stopSpeech()'); // Assign mute functionality
+  }
+}
+
+function changeIconToUnmute() {
+  const icon = document.querySelector('.speech-icon');
+  if (icon) {
+    icon.innerHTML = '🔇'; // Change to unmute icon
+    icon.setAttribute('onclick', 'resumeSpeech()'); // Assign unmute functionality
+  }
+}
+
+map.on('popupclose', function () {
+  stopSpeech(); // Ensure speech stops when the popup is closed
+});
+
+function stopSpeech() {
+  if (currentSpeech) {
+    window.speechSynthesis.cancel(); // Stop any ongoing speech
+    currentSpeech = null; // Reset speech instance
+    isPaused = false; // Ensure paused state is reset
+    changeIconToUnmute(); // Change icon back to unmute
+  }
+}
+
+function resumeSpeech() {
+  if (currentSpeech && isPaused) {
+    window.speechSynthesis.speak(currentSpeech);
+    isPaused = false;
+    changeIconToMute();
+  }
+}
+
+// Toggle button action
+document.getElementById('toggle-history-btn').addEventListener('click', toggleHistoricalIcons);
+
+// Listen for voices to load
+window.speechSynthesis.onvoiceschanged = () => {
+  const voices = window.speechSynthesis.getVoices();
+  console.log('Available voices:', voices); // Logs available voices for debugging
+};
+
+// Map initialization and setup of Mythology popup container
+map.on('load', () => {
+  addDiscountCodeAtEverest([86.9250, 27.9881]);
+
+  mythologyGeoJSON.features.forEach((feature) => {
+    const { mythology, introduction, historicalEvidence, funFacts, popupBgImage, icon } = feature.properties;
+    const coordinates = feature.geometry.coordinates;
+
+    // Create a custom icon for the marker if defined
+    let markerElement;
+    if (icon) {
+      const customIcon = new Image();
+      customIcon.src = icon;
+      customIcon.style.width = '150px';
+      customIcon.style.height = '150px';
+      markerElement = customIcon;
+    }
+
+    const marker = new mapboxgl.Marker(markerElement || undefined)
+      .setLngLat(coordinates)
+      .addTo(map);
+
+    marker.getElement().addEventListener('click', () => {
+      popupContainer.style.display = 'block';
+      popupContainer.style.backgroundImage = `url('${popupBgImage}')`;
+
+      const escapedIntroduction = escapeText(introduction);
+
+      // Populate the popup with content
+      popupContainer.innerHTML = `
+        <div id="mythologyPopup" class="popup-container">
+          <h2> ${mythology} </h2>
+
+          <div class="speech-icons">
+      <div class="speech-icon" onclick="speakText('${escapedIntroduction.replace(/'/g, "\\'")}', 'female')">🗣️</div>
+          </div>
+          
+          <div class="mythology-content">
+            <h3>📜 Introduction</h3>
+            <p>${introduction}</p>
+
+            <h3>🔎 Historical Evidence</h3>
+            <ol>
+              ${Array.isArray(historicalEvidence) && historicalEvidence.length > 0 
+                ? historicalEvidence.map(item => `<li>${item}</li>`).join('')
+                : '<li>No historical evidence available.</li>'}
+            </ol>
+
+            <h3>🗺️ Fun Facts</h3>
+            <ul>
+              ${Array.isArray(funFacts) && funFacts.length > 0 
+                ? funFacts.map(item => `<li>• ${item}</li>`).join('')
+                : '<li>No fun facts available.</li>'}
+            </ul>
+          </div>
+        </div>
+      `; 
+      // Trigger zoom into the mythology's coordinates each time a marker is clicked
+      map.flyTo({ center: coordinates, zoom: 6 });
+      
+      // Set flag to indicate mythology is clicked
+      mythologyClicked = mythology;
+  });
+ });
+});
+  const characterPositions = {
+    "Aztec Mythology": [
+      { name: "Tōnacātēcuhtli and Tōnacācihuātl", coordinates: [-102.73081774926689, 25.608231176458943], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738277654/Aztecgodicondualitygod_hjxybx.svg", link: "https://en.wikipedia.org/wiki/%C5%8Cmete%C5%8Dtl" },
+      { name: "Quetzalcōātl", coordinates: [-96.96830662604556, 17.73097052128851], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738277663/Aztecgodiconquetzalcoatl_nz7lrp.svg", link: "https://en.wikipedia.org/wiki/Quetzalc%C5%8D%C4%81tl#:~:text=Quetzalcoatl%20(%2F%CB%8Ck%C9%9Bt,god%20of%20the%20Aztec%20priesthood." },
+      { name: "Xipe Totec", coordinates: [-98.68964406252071, 22.562948587493686], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738277881/Aztecgodiconxipetotec_ei4bx4.svg", link: "https://en.wikipedia.org/wiki/Xipe_Totec" },
+      { name: "Huītzilōpōchtli", coordinates: [-99.13278, 19.4333], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738277982/Aztecgodiconhuitzilopochtli_spdomx.svg", link: "https://en.wikipedia.org/wiki/Hu%C4%ABtzil%C5%8Dp%C5%8Dchtli#:~:text=Huitzilopochtli%20(Classical%20Nahuatl%3A%20Hu%C4%ABtzil%C5%8Dp%C5%8Dchtli%2C,and%20their%20capital%20city%2C%20Tenochtitlan." },
+      { name: "Tezcatlipoca", coordinates: [-103.12186966870382, 20.943428130663726], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738282395/Aztecgodicontezcatlipoca_j3sek6.svg", link: "https://en.wikipedia.org/wiki/Tezcatlipoca" }
+    ],
+
+    "Mayan Mythology": [
+      { name: "Chaac", coordinates: [-90.029466407598, 20.649233674152466], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738341633/mayangodiconchaac_mwsicb.svg", link: "https://en.wikipedia.org/wiki/Chaac" },
+      { name: "Ix Chel", coordinates: [-86.71289718507724, 21.203594991453617], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738341649/mayangoddessiconixchel_rrbire.svg", link: "https://en.wikipedia.org/wiki/Ixchel" },
+      { name: "Awilix", coordinates: [-91.18575058155417, 14.61324745468338], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738341655/mayangoddessiconawilix_oounjw.svg", link: "https://en.wikipedia.org/wiki/Awilix" },
+      { name: "Itzamna", coordinates: [-89.4907363576717, 18.408790656946547], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738341749/mayangodiconitzamna_dkpk8k.svg", link: "https://en.wikipedia.org/wiki/Itzamna" },
+      { name: "Ah Puch", coordinates: [-92.85533246713727, 18.035742981635412], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738341754/mayangodiconahpuch_lkx527.svg", link: "https://en.wikipedia.org/wiki/Cizin" }
+    ],
+
+    "Polynesian Mythology": [
+      { name: "Kanaloa", coordinates: [-159.15372472863942, 21.90762266507674], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738348986/polynesiangodiconkanaloa_iz3cl0.svg", link: "https://en.wikipedia.org/wiki/Kanaloa" },
+      { name: "Kane", coordinates: [-158.0129462763094, 21.482124791555066], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738348994/polynesiangodiconkane_zz8yyo.svg", link: "https://en.wikipedia.org/wiki/K%C4%81ne" },
+      { name: "Hina", coordinates: [-156.9664878423283, 21.192646278120648], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738348974/polynesiangoddessiconhina_ipfx3z.svg", link: "https://en.wikipedia.org/wiki/Hina_(goddess)" },
+      { name: "Ku", coordinates: [-155.85621922991533, 20.23300041405352], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738349000/polynesiangodiconku_fp9c6g.svg", link: "https://en.wikipedia.org/wiki/K%C5%AB" },
+      { name: "Pele", coordinates: [-155.28320693862645, 19.40749970400406], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738348979/polynesiangoddessiconpele_txtike.svg", link: "https://en.wikipedia.org/wiki/Pele_(deity)" }
+    ],
+
+    "Japanese Mythology": [
+      { name: "Tsukuyomi", coordinates: [130.60835311551685, 32.005377631983706], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738367392/japanesegodicontsukuyomi_c8hptp.svg", link: "https://simple.wikipedia.org/wiki/Tsukuyomi#:~:text=Tsukuyomi%20(Japanese%3A%20%E6%9C%88%E8%AA%AD)%2C,artwork%20of%20Tsukuyomi%2Dno%2DMikoto" },
+      { name: "Amaterasu", coordinates: [136.72547379996814, 34.45518073350147], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738367385/japanesegoddessiconamaterasu_zsmgib.svg", link: "https://en.wikipedia.org/wiki/Amaterasu" },
+      { name: "Raijin", coordinates: [139.59560960000002, 36.75842313816994], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738367317/japanesegodiconraijin_l4y40v.svg", link: "https://en.wikipedia.org/wiki/Raijin#:~:text=Raijin%20(%E9%9B%B7%E7%A5%9E%2C%20lit.,mythology%20and%20the%20Shinto%20religion." },
+      { name: "Fujin", coordinates: [139.7963656, 35.71124697233308], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738367321/japanesegodiconfujin_lqfdms.svg", link: "https://en.wikipedia.org/wiki/F%C5%ABjin" },
+      { name: "Susanoo", coordinates: [133.17276624077013, 36.06871519624407], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738367312/japanesegodiconsusanoo_qvgsh7.svg", link: "https://en.wikipedia.org/wiki/Susanoo-no-Mikoto" }
+    ],
+
+    "Chinese Mythology": [
+      { name: "Sun Wukong", coordinates: [102.89024811603889, 31.341631136556625], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738368295/chinesegodiconsunwukong_nlvzmd.svg", link: "https://en.wikipedia.org/wiki/Monkey_King" },
+      { name: "Jade Emporer", coordinates: [117.1092885083993, 36.25742780314187], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738373406/chinesegodiconjadeemperor_jhd42x.svg", link: "https://en.wikipedia.org/wiki/Jade_Emperor" },
+      { name: "Pangu", coordinates: [113.1832615722313, 23.766166363365336], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738373411/chinesegodiconpangu_uxablk.svg", link: "https://en.wikipedia.org/wiki/Pangu#:~:text=Pangu%20or%20Pan%20Gu%20(Chinese,of%20Pangu%20from%20Sancai%20Tuhui" },
+      { name: "Chang'e", coordinates: [106.64619174671826, 29.890317168069497], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738376904/chinesegoddessiconchang_e_jm6tfy.svg", link: "https://en.wikipedia.org/wiki/Chang%27e" },
+      { name: "Ao Guang", coordinates: [121.62518726481633, 30.484676298778407], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738373400/chinesegodiconaoguang_azizvk.svg", link: "https://en.wikipedia.org/wiki/Ao_Guang" }
+    ],
+
+    "Hindu Mythology": [
+      { name: "Brahma", coordinates: [74.54896525767171, 26.487598347646713], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738439663/hindugodbrahma_arw4be.svg", link: "https://en.wikipedia.org/wiki/Brahma" },
+      { name: "Shiva", coordinates: [74.48395632883584, 14.093726294201195], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738439678/hindugodshiva_owhnzt.svg", link: "https://en.wikipedia.org/wiki/Shiva" },
+      { name: "Vishnu", coordinates: [85.8179386, 19.805159973170724], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738439686/hindugodvishnu_dz10hw.svg", link: "https://en.wikipedia.org/wiki/Vishnu" },
+      { name: "Saraswati", coordinates: [77.95593768465662, 18.878028975965414], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738439673/hindugoddesssaraswati_jlte0w.svg", link: "https://en.wikipedia.org/wiki/Saraswati" },
+      { name: "Lakshami", coordinates: [80.27041165767169, 12.992760712469607], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738439668/hindugoddesslakshmi_zcejld.svg", link: "https://en.wikipedia.org/wiki/Lakshmi" }
+    ],
+
+    "Sumerian Mythology": [
+      { name: "Ki", coordinates: [44.20005724083011, 32.66764856201276], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738449104/sumeriangoddessiconki_i4defa.svg", link: "https://en.wikipedia.org/wiki/Ki_(goddess)" },
+      { name: "Enlil", coordinates: [45.238025424916266, 32.152872986813875], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738449123/sumeriangodiconenlil_kamgk7.svg", link: "https://en.wikipedia.org/wiki/Enlil#:~:text=Enlil%2C%20later%20known%20as%20Elil,Babylonians%2C%20Assyrians%2C%20and%20Hurrians." },
+      { name: "Anu", coordinates: [45.638533536416425, 31.325269803040317], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738449111/sumeriangodiconan_wcb3gh.svg", link: "https://en.wikipedia.org/wiki/Anu" },
+      { name: "Inanna", coordinates: [47.11572041642976, 31.82690978796196], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738449097/sumeriangoddessiconinanna_wfrqoj.svg", link: "https://en.wikipedia.org/wiki/Inanna#:~:text=Inanna%20is%20the%20ancient%20Mesopotamian,divine%20law%2C%20and%20political%20power." },
+      { name: "Enki", coordinates: [47.701045546591985, 30.661043182351506], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738449117/sumeriangodiconenki_e7vjrf.svg", link: "https://en.wikipedia.org/wiki/Enki#:~:text=Enki%20(Sumerian%3A%20%F0%92%80%AD%F0%92%82%97%F0%92%86%A0EN%2D,and%20one%20of%20the%20Anunnaki." }
+    ],
+
+    "Egyptian Mythology": [
+      { name: "Ra", coordinates: [25.550182762222175, 29.20865408321253], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738534674/egyptiangodiconra_tm5wng.svg", link: "https://en.wikipedia.org/wiki/Ra" },
+      { name: "Thoth", coordinates: [32.60055472698491, 25.717264486747737], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738534681/egyptiangodiconthoth_znjwm8.svg", link: "https://en.wikipedia.org/wiki/Thoth" },
+      { name: "Sobek", coordinates: [32.928421171164146, 24.4522992310483], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738538995/egyptiangodiconsobek_eplbks.svg", link: "https://en.wikipedia.org/wiki/Sobek" },
+      { name: "Isis", coordinates: [31.29070153216656, 31.056605484292792], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738533095/egyptiangoddessiconisis_mou67a.svg", link: "https://en.wikipedia.org/wiki/Isis" },
+      { name: "Anubis", coordinates: [30.89819628079371, 29.518833053964126], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738533087/egyptiangodiconanubis_q46jyq.svg", link: "https://en.wikipedia.org/wiki/Anubis" }
+    ],
+
+    "Greek Mythology": [
+      { name: "Aphrodite", coordinates: [22.87005067047568, 37.89382963137904], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696298/greekgoddessiconaphrodite_g09aqb.svg", link: "https://en.wikipedia.org/wiki/Aphrodite" },
+      { name: "Athena", coordinates: [23.72571763908385, 37.97774915056472], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738703009/greekgoddessiconathena_b9dwsx.svg", link: "https://en.wikipedia.org/wiki/Athena" },
+      { name: "Zeus", coordinates: [22.3500064739207, 40.08392018476631], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696282/greekgodiconzeus_r8qkbu.svg", link: "https://en.wikipedia.org/wiki/Zeus" },
+      { name: "Poseidon", coordinates: [25.083231458958316, 36.08806470729101], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696289/greekgodiconposeidon_wzdcc5.svg", link: "https://en.wikipedia.org/wiki/Poseidon" },
+      { name: "Ares", coordinates: [24.081103424792868, 40.954064513771776], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696294/greekgodiconares_rbvh04.svg", link: "https://en.wikipedia.org/wiki/Ares" }
+    ],
+
+    "Roman Mythology": [
+      { name: "Jupiter", coordinates: [8.948381685613501, 42.386916461059954], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696253/romangodiconjupiter_td3sml.svg", link: "https://en.wikipedia.org/wiki/Jupiter_(god)" },
+      { name: "Hercules", coordinates: [13.586232028835845, 37.290322556072525], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696259/romangodiconhercules_adhxyb.svg", link: "https://en.wikipedia.org/wiki/Hercules" },
+      { name: "Diana", coordinates: [16.113031561232276, 40.00144416535975], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696276/romangoddessicondiana_md7mj0.svg", link: "https://en.wikipedia.org/wiki/Diana_(mythology)" },
+      { name: "Minerva", coordinates: [12.616825325674165, 43.07063862284102], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696271/romangoddessiconminerva_ld4jbw.svg", link: "https://en.wikipedia.org/wiki/Minerva" },
+      { name: "Venus", coordinates: [12.48979303068678, 41.89117590144325], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738696265/romangoddessiconvenus_s0lrbj.svg", link: "https://en.wikipedia.org/wiki/Venus_(mythology)" }
+    ],
+
+    "Celtic Mythology": [
+      { name: "Dagda", coordinates: [-7.5555458551481145, 53.488854298791416], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738763452/celticgodicondagda_m3rfza.svg", link: "https://en.wikipedia.org/wiki/The_Dagda" },
+      { name: "Cu Chulainn", coordinates: [-6.465872171164152, 53.97461627177487], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739029905/celticgodiconcuchulainn_cfzn1g.svg", link: "https://en.wikipedia.org/wiki/C%C3%BA_Chulainn" },
+      { name: "The Morrigan", coordinates: [-6.4754917, 53.69481989083542], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738763441/celticgoddessiconthemorrigan_b0x0hd.svg", link: "https://en.wikipedia.org/wiki/The_Morr%C3%ADgan" },
+      { name: "Danu", coordinates: [-8.752636482459813, 52.485352361729454], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738763437/celticgoddessicondanu_muq03g.svg", link: "https://en.wikipedia.org/wiki/Danu_(Irish_goddess)" },
+      { name: "Cernunnos", coordinates: [-7.09758451153892, 54.791846378376285], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738763448/celticgodiconcernunnos_mkiqk9.svg", link: "https://en.wikipedia.org/wiki/Cernunnos" },
+      { name: "Lugh", coordinates: [-7.1298504, 52.57946051197459], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738763459/celticgodiconlugh_x3zl7s.svg", link: "https://en.wikipedia.org/wiki/Lugh#:~:text=Lugh%20or%20Lug%20(Old%20Irish,multiple%20disciplines%2C%20including%20the%20arts." }
+    ],
+
+    "Norse Mythology": [
+      { name: "Nidhoggr", coordinates: [6.01018246740827, 60.1266021651232], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739921154/norsemonsternidhoggr_g3wrre.svg", link: "https://en.wikipedia.org/wiki/N%C3%AD%C3%B0h%C3%B6ggr" },
+      { name: "Thor", coordinates: [-6.976239317685147, 62.19019384424141], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738971838/norsegodiconthor_xlxrvx.svg", link: "https://en.wikipedia.org/wiki/Thor" },
+      { name: "Freyr", coordinates: [9.406087713047986, 56.916060509121124], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965599/norsegodiconfreyr_g2vdtg.svg", link: "https://en.wikipedia.org/wiki/Freyr" },
+      { name: "Ullr", coordinates: [6.6861032960992715, 62.110574466084984], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965554/norsegodiconullr_waub9c.svg", link: "https://en.wikipedia.org/wiki/Ullr" },
+      { name: "Freyja", coordinates: [14.349388309054195, 56.78579604481081], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965621/norsegoddessiconfreyja_ntwwni.svg", link: "https://en.wikipedia.org/wiki/Freyja" },
+      { name: "Loki", coordinates: [14.837406786507543, 62.933575282484775], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965586/norsegodiconloki_jfmmoi.svg", link: "https://en.wikipedia.org/wiki/Loki" },
+      { name: "Frigg", coordinates: [-18.726723559851106, 65.2280262053718], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965613/norsegoddessiconfrigg_vxnltl.svg", link: "https://en.wikipedia.org/wiki/Frigg" },
+      { name: "Tyr", coordinates: [13.186330677534913, 64.30673717754021], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965564/norsegodicontyr_dgha0k.svg", link: "https://en.wikipedia.org/wiki/T%C3%BDr" },
+      { name: "Skadi", coordinates: [8.486587290451727, 61.55889393943289], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965608/norsegoddessiconskadi_eei9ct.svg", link: "https://en.wikipedia.org/wiki/Ska%C3%B0i" },
+      { name: "Baldur", coordinates: [11.580806456474548, 59.50710305800358], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738977459/norsegodiconbaldur_o3fwuk.svg", link: "https://en.wikipedia.org/wiki/Baldr" },
+      { name: "Njordr", coordinates: [12.663300808825463, 67.6847635183153], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965579/norsegodiconnjordr_mr7n2h.svg", link: "https://en.wikipedia.org/wiki/Nj%C3%B6r%C3%B0r" },
+      { name: "Heimdallr", coordinates: [-16.812771211993866, 64.51004945147567], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965593/norsegodiconheimdallr_osgkgw.svg", link: "https://en.wikipedia.org/wiki/Heimdall" },
+      { name: "Jormungandr", coordinates: [-2.58096301127969, 66.81315407102363], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738973584/norsemonstericonjormungandr_ejrpx0.svg", link: "https://en.wikipedia.org/wiki/J%C3%B6rmungandr" },
+      { name: "Odin", coordinates: [6.450126302871265, 58.92775332205309], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1738965571/norsegodiconodin_hhvmep.svg", link: "https://en.wikipedia.org/wiki/Odin" },
+      { name: "Ratatoskr", coordinates: [9.514519734211648, 56.136906314156334], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739921872/norsecreatureratatoskr_i6rcca.svg", link: "https://en.wikipedia.org/wiki/Ratatoskr" },
+      { name: "Fenrir", coordinates: [23.194266667407327, 68.04664519677961], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739921147/norsemonsterfenrir_zaqlxp.svg", link: "https://en.wikipedia.org/wiki/Fenrir#:~:text=Fenrir%20(Old%20Norse%20'fen%2D,monstrous%20wolf%20in%20Norse%20mythology." },
+    ],
+
+    "Slavic Mythology": [
+      { name: "Perun", coordinates: [30.5501451, 50.3942928], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740964664/perungodmapicon_zafabq.svg", link: "https://en.wikipedia.org/wiki/Perun" },
+      { name: "Svarog", coordinates: [31.268282589075547, 58.55214471810884], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740964669/svaroggodmapicon_tyfrm2.svg", link: "https://en.wikipedia.org/wiki/Svarog" },
+      { name: "Marzanna", coordinates: [21.37982611323218, 55.292986460196076], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740964658/marzannagoddessmapicon_qaxb0x.svg", link: "https://en.wikipedia.org/wiki/Morana_(goddess)" },
+      { name: "Veles", coordinates: [16.332073, 50.786963], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740964675/velesgodmapicon_rqbrft.svg", link: "https://en.wikipedia.org/wiki/Veles_(god)" },
+      { name: "Devana", coordinates: [36.715021853828226, 62.33551493475664], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740964653/devanagoddessmapicon_ysia2c.svg", link: "https://en.wikipedia.org/wiki/Devana" }
+    ],
+
+    "Biblical History": [
+      { name: "Ruth", coordinates: [35.564895745446336, 31.332531154305062], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407354/ruthbiblicalmapicon_r7zudx.svg", link: "https://en.wikipedia.org/wiki/Ruth_(biblical_figure)" },
+      { name: "Deborah", coordinates: [35.22139569537781, 31.854992341508115], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407226/deborahbiblicalmapicon_z7972y.svg", link: "https://en.wikipedia.org/wiki/Deborah" },
+      { name: "Esther", coordinates: [48.25560118089863, 32.19112068559353], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407194/estherbiblicalmapicon_ilezrp.svg", link: "https://en.wikipedia.org/wiki/Esther" },
+      { name: "Mary, mother of Jesus", coordinates: [35.30130950975559, 32.706166907444874], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742948081/mothermarybiblicalmapicon_h9sbzw.svg", link: "https://en.wikipedia.org/wiki/Mary,_mother_of_Jesus" },
+      { name: "Samson", coordinates: [34.98535, 31.775086], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407258/samsonbiblicalmapicon_moaecu.svg", link: "https://en.wikipedia.org/wiki/Samson" },
+      { name: "Jonah", coordinates: [43.152778, 36.359444], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742934862/jonahbiblicalmapicon_bjbeax.svg", link: "https://en.wikipedia.org/wiki/Jonah" },
+      { name: "Jeremiah", coordinates: [35.295278, 31.831667], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407435/prophetjeremiahbiblicalmapicon_rdkp1m.svg", link: "https://en.wikipedia.org/wiki/Jeremiah" },
+      { name: "Moses", coordinates: [33.974928894646055, 28.540654417718805], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742930018/mosesbiblicalmapicon_a7cmqm.svg", link: "https://en.wikipedia.org/wiki/Moses" },
+      { name: "Enoch", coordinates: [37.27519586137356, 36.377858015557884], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742921376/enochbiblicalmapicon_gwff1m.svg", link: "https://en.wikipedia.org/wiki/Enoch" },
+      { name: "Abraham", coordinates: [46.105126, 30.961653], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742922762/abrahambiblicalmapicon_nskhsq.svg", link: "https://en.wikipedia.org/wiki/Abraham" },
+      { name: "Isaac", coordinates: [34.6069, 31.3817], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742928508/isaacbiblicalmapicon_dzh30e.svg", link: "https://en.wikipedia.org/wiki/Isaac" },
+      { name: "Jacob", coordinates: [35.285331, 32.209461], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407513/jacobbiblicalmapicon_cobxem.svg", link: "https://en.wikipedia.org/wiki/Jacob" },
+      { name: "John the Baptist", coordinates: [35.54716838664397, 31.83689789734676], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407576/johnthebaptistbiblicalmapicon_cibzjx.svg", link: "https://en.wikipedia.org/wiki/John_the_Baptist" },
+      { name: "Isaiah", coordinates: [35.236025018060346, 31.77958105266088], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407622/prophetisaiahbiblicalmapicon_dfhv6m.svg", link: "https://en.wikipedia.org/wiki/Isaiah" },
+      { name: "Daniel", coordinates: [48.243639, 32.190361], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742407683/danielbiblicalmapicon_g4iqn2.svg", link: "https://en.wikipedia.org/wiki/Daniel_(biblical_figure)" },
+      { name: "Noah", coordinates: [44.29924776137355, 39.70300005166491], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742413557/noahbiblicalmapicon_bcbdzr.svg", link: "https://en.wikipedia.org/wiki/Noah" },
+      { name: "Elijah", coordinates: [35.85, 32.55], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742860836/prophetelijahbiblicalmapicon_mjmyxt.svg", link: "https://en.wikipedia.org/wiki/Elijah" },
+      { name: "Joshua", coordinates: [31.4775, 30.872222], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742837462/joshuabiblicalmapicon_tqbkpz.svg", link: "https://en.wikipedia.org/wiki/Joshua" },
+      { name: "Joseph", coordinates: [32.610278, 25.720556], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742937671/josephbiblicalmapicon_e7gdin.svg", link: "https://en.wikipedia.org/wiki/Joseph_(Genesis)" },
+      { name: "David", coordinates: [35.235556, 31.773611], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742423619/davidbiblicalmapicon_k90hyg.svg", link: "https://en.wikipedia.org/wiki/David" },
+      { name: "Paul the Apostle", coordinates: [34.893682306366564, 36.91945111535898], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742423670/apostlepaulbiblicalmapicon_fzmjgg.svg", link: "https://en.wikipedia.org/wiki/Paul_the_Apostle" },
+      { name: "Andrew the Apostle", coordinates: [35.61907817236381, 32.90758224412306], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742427854/apostleandrewbiblicalmapicon_ndrgxu.svg", link: "https://en.wikipedia.org/wiki/Andrew_the_Apostle" },
+      { name: "John the Apostle", coordinates: [35.61923700710534, 32.893850939032355], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742427558/apostlejohnbiblicalmapicon_qfdwch.svg", link: "https://en.wikipedia.org/wiki/John_the_Apostle" },
+      { name: "Mary of Magdala", coordinates: [35.515556, 32.825], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742951948/marymagdalenebiblicalmapicon_vndcy1.svg", link: "https://en.wikipedia.org/wiki/Mary_Magdalene" },
+      { name: "Apostle James the Great", coordinates: [35.62557058221303, 32.91941367897612], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742428248/apostlejamesthegreatbiblicalmapicon_f0xwln.svg", link: "https://en.wikipedia.org/wiki/James_the_Great" },
+      { name: "Peter the Apostle", coordinates: [35.63123770412012, 32.91074182197809], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742427633/apostlesimonpeterbiblicalmapicon_gcl67k.svg", link: "https://en.wikipedia.org/wiki/Saint_Peter" },
+      { name: "Solomon", coordinates: [35.235, 31.778056], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742489848/kingsolomonbiblicalmapicon_gi6vk2.svg", link: "https://en.wikipedia.org/wiki/Solomon" },
+      { name: "Matthew the Apostle", coordinates: [35.575, 32.881111], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742428151/apostlematthewbiblicalmapicon_wjv24y.svg", link: "https://en.wikipedia.org/wiki/Matthew_the_Apostle" },
+      { name: "Apostle James the Less", coordinates: [35.53, 32.76], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742428483/apostlejamesthelessbiblicalmapicon_kfacb9.svg", link: "https://en.wikipedia.org/wiki/James_the_Less" },
+      { name: "Apostle Nathanael", coordinates: [35.694444, 33.248611], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1743012898/apostlenathanaelbiblicalmapicon_suepof.svg", link: "https://en.wikipedia.org/wiki/Bartholomew_the_Apostle" },
+      { name: "Apostle Philip", coordinates: [35.63921021634677, 32.9053778673692], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742427915/apostlephilipbiblicalmapicon_oxgvcw.svg", link: "https://en.wikipedia.org/wiki/Philip_the_Apostle" },
+      { name: "Apostle Thomas", coordinates: [34.883, 32.4], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1743014054/apostlethomasbiblicalmapicon_yjv1ep.svg", link: "https://en.wikipedia.org/wiki/Thomas_the_Apostle" },
+      { name: "Apostle Simon the Zealot", coordinates: [35.299167, 33.209167], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742428717/apostlesimonthezealotbiblicalmapicon_nn9aui.svg", link: "https://en.wikipedia.org/wiki/Simon_the_Zealot" },
+      { name: "Apostle Thaddeus", coordinates: [35.43497376377482, 32.833985384886226], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742428426/apostlethaddeusbiblicalmapicon_lx719c.svg", link: "https://en.wikipedia.org/wiki/Jude_the_Apostle" },
+      { name: "Apostle Judas Iscariot", coordinates: [35.124376, 31.344952], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742430496/apostlejudasbiblicalmapicon_z91xmb.svg", link: "https://en.wikipedia.org/wiki/Judas_Iscariot" },
+      { name: "Jesus of Nazareth", coordinates: [35.311311980704694, 32.705782702807895], image: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1742428768/jesusofnazarethbiblicalmapicon_dfmhsw.svg", link: "https://en.wikipedia.org/wiki/Jesus" }
+    ]
+  }
+
+let currentPopupContainer = null;
+let currentMarkers = [];
+
+// Function to determine the correct position of the popup (above or below the marker)
+function updatePopupPosition(popup, marker) {
+  const markerRect = marker.getElement().getBoundingClientRect();
+  const popupRect = popup.getElement().getBoundingClientRect();
+
+  // Check if popup is positioned below the marker (bottom arrow should appear)
+  if (popupRect.top > markerRect.bottom) {
+    popup.getElement().classList.add('mapboxgl-popup-anchor-top');  // Popup below marker
+    popup.getElement().classList.remove('mapboxgl-popup-anchor-bottom');
+  } else {
+    popup.getElement().classList.add('mapboxgl-popup-anchor-bottom');  // Popup above marker
+    popup.getElement().classList.remove('mapboxgl-popup-anchor-top');
+  }
+}
+
+// Function to add character markers based on mythology
+function addCharacterMarkers(mythology) {
+  const characters = characterPositions[mythology];
+
+  // Clear previous character markers and wait for zoom
+  clearCharacterMarkers();
+
+  characters.forEach(character => {
+    const marker = new mapboxgl.Marker({ element: createCharacterIcon(character.image) })
+      .setLngLat(character.coordinates)
+      .addTo(map);
+
+    // Create a Mapbox Popup for the character marker
+    const popup = new mapboxgl.Popup({
+      offset: 120,
+      closeOnClick: false,
+      closeButton: false
+    })
+    .setLngLat(character.coordinates)
+.setHTML(`
+    <h3 style="color: #00d4ff; font-size: 1em; margin-bottom: 5px 0 10px 0;">${character.name}</h3>
+    <a href="${character.link}" target="_blank" style="color: #FFFFFF; text-decoration: none; font-weight: bold; font-size: 1.5em; margin-bottom: -5px">
+      Learn
+    </a>
+    <br> <!-- Line break for spacing -->
+    <a href="${character.secondLink}" target="_blank" style="color: #FFD700; text-decoration: none; font-weight: bold; font-size: 1.5em; margin-bottom: 10px;">
+      Shop Art
+    </a>
+  </div>
+`);
+
+    marker.getElement().addEventListener('click', (event) => {
+      event.stopPropagation(); // Prevents the map click from interfering
+
+      // Close all other popups before opening a new one
+      if (currentPopup) {
+        currentPopup.remove();
+      }
+
+      popup.addTo(map); // Show the new popup above the marker
+      currentPopup = popup; // Store the current popup reference
+
+      // Update popup position dynamically
+      updatePopupPosition(popup, marker);
+
+      // Fly to the clicked character's position
+      map.flyTo({
+        center: character.coordinates, // Coordinates of clicked character
+        zoom: 9, // You can change this zoom level as needed
+        essential: true
+      });
+    });
+
+    // Store the marker globally so we can clear it later if needed
+    characterMarkers.push(marker);
+  });
+}
+
+// Clear character markers (called when zooming out or switching mythology)
+function clearCharacterMarkers() {
+  characterMarkers.forEach(marker => marker.remove());
+  characterMarkers = []; // Reset the markers array
+}
+
+// Hide character markers when zooming out
+map.on('zoom', () => {
+  const zoomLevel = map.getZoom();
+
+  // Only add character markers when the zoom level is reached
+  if (zoomLevel >= 5 && mythologyClicked) {
+    addCharacterMarkers(mythologyClicked); // Use the mythology that was clicked
+    mythologyClicked = false; // Reset the flag after adding markers
+  }
+
+  // If zoom level is below 3, remove the character markers
+  if (zoomLevel < 3) {
+    clearCharacterMarkers();
+  }
+
+  // Close the popup when zooming out far enough (e.g., zoom level 3 or lower)
+  if (zoomLevel <= 3 && currentPopup) {
+    currentPopup.remove(); // Close the Mapbox popup when zoomed out too far
+    currentPopup = null; // Reset the popup tracker
+  }
+});
+
+// Close the popup when clicking anywhere else on the map or document
+document.addEventListener('click', (event) => {
+  const popup = document.getElementById('character-popup-container');
+  // Check if clicked outside the popup and not the marker
+  if (popup && !popup.contains(event.target) && !event.target.closest('.mapboxgl-marker')) {
+    popup.style.display = 'none'; // Close the popup if clicked outside
+    currentPopupContainer = null; // Reset the popup tracker
+  }
+});
+
+// Close the popup when clicking on a marker's popup
+map.on('click', (event) => {
+  if (!event.originalEvent.target.closest('.mapboxgl-marker') && currentPopup) {
+    currentPopup.remove(); // Close the Mapbox popup if clicked outside the marker
+    currentPopup = null; // Reset the popup tracker
+  }
+});
+
+// Function to create an image for each character marker
+function createCharacterIcon(imagePath) {
+  const img = document.createElement('img');
+  img.src = imagePath;
+  img.style.width = '200px';
+  img.style.height = '200px';
+  return img;
+}
+
+// Clear character markers when zooming out or switching mythology
+map.on('zoom', () => {
+  const zoomLevel = map.getZoom();
+
+  // Only add character markers when the zoom level is reached
+  if (zoomLevel >= 5 && mythologyClicked) {
+    addCharacterMarkers(mythologyClicked); // Use the mythology that was clicked
+    mythologyClicked = false; // Reset the flag after adding markers
+  }
+
+  // If zoom level is below 2, remove the character markers
+  if (zoomLevel < 2) {
+    clearCharacterMarkers();
+  }
+});
+    // Function to "tattoo" the discount code at Mount Everest's coordinates
+    let discountMarker; // Store the discount marker globally
+    let copiedMessageElement; // Store the copied message element globally
+
+    function addDiscountCodeAtEverest(coordinates) {
+      // Create the discount code marker element
+      const discountMarkerElement = document.createElement('div');
+      discountMarkerElement.classList.add('discount-marker');
+      discountMarkerElement.innerHTML = 'Use code <b>DISCOVER20</b> for 20% off!';
+
+      // Create the "Copied!" message element
+      copiedMessageElement = document.createElement('div');
+      copiedMessageElement.classList.add('copied-message');
+      copiedMessageElement.innerText = 'Copied!';
+
+      // Add click event to copy the discount code to the clipboard
+      discountMarkerElement.addEventListener('click', () => {
+        const discountCode = 'DISCOVER20';
+        
+        // Try to copy the discount code to the clipboard
+        navigator.clipboard.writeText(discountCode).then(() => {
+          showCopiedMessage(discountMarkerElement); // Show the "Copied!" message above the marker
+        }).catch((err) => {
+          console.error('Failed to copy text: ', err);
+        });
+      });
+
+      // Create the discount marker at Mount Everest's coordinates
+      discountMarker = new mapboxgl.Marker({
+        element: discountMarkerElement,
+        anchor: 'center', // Ensure the text is centered
+      })
+        .setLngLat(coordinates)
+        .addTo(map);
+
+      // Initially hide the discount code marker
+      discountMarker.getElement().style.display = 'none'; // Hide it initially
+
+      // Create the "Copied!" message element and add it to the map
+      new mapboxgl.Marker({
+        element: copiedMessageElement,
+        anchor: 'bottom',
+      })
+        .setLngLat(coordinates)
+        .addTo(map)
+        .getElement()
+        .style.display = 'none'; // Hide it initially
+    }
+
+    // Show the "Copied!" message and fade it out
+    function showCopiedMessage(markerElement) {
+      const copiedMessage = copiedMessageElement;
+      
+      // Position the "Copied!" message just above the marker
+      const markerPosition = markerElement.getBoundingClientRect();
+      copiedMessage.style.left = `${markerPosition.left + markerPosition.width / 2 - copiedMessage.offsetWidth / 2}px`;
+      copiedMessage.style.bottom = `${markerPosition.top + markerPosition.height + 10}px`; // Just above the marker
+      copiedMessage.style.display = 'block';
+      copiedMessage.style.opacity = 1;
+
+      // After 2 seconds, fade the message out
+      setTimeout(() => {
+        copiedMessage.style.opacity = 0;
+        setTimeout(() => {
+          copiedMessage.style.display = 'none';
+        }, 300); // Hide the message after fade-out
+      }, 2000); // Keep the message visible for 2 seconds
+    }
+
+    // Map zoom event listener
+    map.on('zoom', () => {
+      const zoomLevel = map.getZoom();
+
+      // Show the discount code when zoom level is above 8
+      if (zoomLevel >= 8) {
+        discountMarker.getElement().style.display = 'block';
+      } else {
+        discountMarker.getElement().style.display = 'none';
+      }
+    });
+
+    // Hide popup when clicking outside markers
+    map.on('click', (e) => {
+      if (!e.originalEvent.target.closest('.mapboxgl-marker')) {
+        popupContainer.style.display = 'none';
+      }
+    });
+
+let currentPopup = null;
+
+const historicalGeoJSON = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: {
+        name: "Machu Picchu",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739922789/machupicchumapicon_avcoth.svg", 
+        link1: "https://en.wikipedia.org/wiki/Machu_Picchu",
+        link2: "https://example.com/roman-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-72.5450, -13.1631]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Pyramids of Giza",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739928100/pyramidsofgizamapicon_jwx3nr.svg",
+        link1: "https://en.wikipedia.org/wiki/Great_Pyramid_of_Giza",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [31.1342, 29.9792]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Great wall of China",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740422564/greatwallofchinamapicon_iwmxky.svg",
+        link1: "https://en.wikipedia.org/wiki/Great_Wall_of_China",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [116.5704, 40.4319]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Notre-Dame Cathedral",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739936232/notredamemapicon_qwuxae.svg",
+        link1: "https://en.wikipedia.org/wiki/Notre-Dame_de_Paris",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [2.3499, 48.8530]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Eiffel Tower",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1741042705/eiffeltowermapicon_bl1bvv.svg",
+        link1: "https://en.wikipedia.org/wiki/Eiffel_Tower",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [2.2944598392373594, 48.85855359832744]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Colosseum",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739934303/colosseummapicon_zzhib7.svg",
+        link1: "https://en.wikipedia.org/wiki/Colosseum",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [12.492230896509023, 41.89030601301506]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Empire State Building",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739935878/empirestatebuildingmapicon_nkotjq.svg",
+        link1: "https://en.wikipedia.org/wiki/Empire_State_Building",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-73.9856429458802, 40.748546135057]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Independence Hall",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739935883/independencehallmapicon_nxxxee.svg",
+        link1: "https://en.wikipedia.org/wiki/Independence_Hall",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-75.15003403224459, 39.94898059533785]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Piracy",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739937466/pirateshipmapicon_ghlgvy.svg",
+        link1: "https://en.wikipedia.org/wiki/Piracy_in_the_Caribbean",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-66.53220727000206, 14.717550311343945]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Mount Olympus",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1739939386/mountolympusmapicon_zbrubg.svg",
+        link1: "https://en.wikipedia.org/wiki/Mount_Olympus",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [22.3499, 40.0834]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Taj Mahal",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740073603/tajmahalmapicon_kpytfe.svg",
+        link1: "https://en.wikipedia.org/wiki/Taj_Mahal",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [78.0421, 27.1751]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Golden Gate Bridge",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740074047/goldengatebridgemapicon_jckmpq.svg",
+        link1: "https://en.wikipedia.org/wiki/Golden_Gate_Bridge",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-122.4786, 37.8199]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Big Ben",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740109769/bigbenmapicon_zp02gp.svg",
+        link1: "https://en.wikipedia.org/wiki/Big_Ben",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-0.1246, 51.5007]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Statue of Liberty",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740110870/statueoflibertymapicon_kpke21.svg",
+        link1: "https://en.wikipedia.org/wiki/Statue_of_Liberty",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-74.0445, 40.6892]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Christ the Redeemer",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740112475/christtheredeemermapicon_w5i1xx.svg",
+        link1: "https://en.wikipedia.org/wiki/Christ_the_Redeemer_(statue)",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-43.2105, -22.9519]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Burj Khalifa",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740113064/burjkhalifamapicon_oyweql.svg",
+        link1: "https://en.wikipedia.org/wiki/Burj_Khalifa",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [55.2744, 25.1972]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Stonehenge",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740246081/stonehengemapicon_vyvbfr.svg",
+        link1: "https://en.wikipedia.org/wiki/Stonehenge",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-1.8262, 51.1789]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Sydney Opera House",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740247253/sydneyoperahousemapicon_yfjvro.svg",
+        link1: "https://en.wikipedia.org/wiki/Sydney_Opera_House",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [151.21524305565015, -33.8566329370576]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Acropolis",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740248920/acropolismapicon_e3nlos.svg",
+        link1: "https://en.wikipedia.org/wiki/Acropolis",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [23.72656199489006, 37.97160573316525]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Brandenburg Gate",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740250715/brandenburggatemapicon_hbnicf.svg",
+        link1: "https://en.wikipedia.org/wiki/Brandenburg_Gate",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [13.377702130859001, 52.516295042569716]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Leaning Tower of Pisa",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740251303/leaningtowerofpisamapicon_vaobhf.svg",
+        link1: "https://en.wikipedia.org/wiki/Leaning_Tower_of_Pisa",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [10.3966, 43.7230]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Norse Longship",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740252809/norselongshipmapicon_vdnliz.svg",
+        link1: "https://en.wikipedia.org/wiki/Longship",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [8.82990117825233, 57.66633679184798]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Greek Navy",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740262553/greekshipmapicon_ollb5e.svg",
+        link1: "https://en.wikipedia.org/wiki/Trireme",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [29.000327242354746, 33.13069838991105]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Egyptian Navy",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740262322/egyptianshipmapicon_exmdu8.svg",
+        link1: "https://en.wikipedia.org/wiki/Ancient_Egyptian_navy",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [29.937556457746645, 32.72189989056404]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Viking Longhouse",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740415542/vikinggreathallmapicon_lqpttb.svg",
+        link1: "https://en.wikipedia.org/wiki/Longhouse",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-19.750889299999997, 64.15145527709339]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Great Hall",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740418127/vikingmeadhallmapicon_ychr5z.svg",
+        link1: "https://en.wikipedia.org/wiki/Mead_hall",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [10.709484468610917, 55.14777944636482]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Scottish Broch",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740420639/scottishbrochmapicon_pac0gn.svg",
+        link1: "https://en.wikipedia.org/wiki/Broch",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-5.585979075081976, 57.19976406865475]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Osaka Castle",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740422452/osakacastlemapicon_ji4bqz.svg",
+        link1: "https://en.wikipedia.org/wiki/Osaka_Castle",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [135.5259, 34.6873]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Pyramid of the Sun",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740423910/pyramidofthesunmapicon_kb2qot.svg",
+        link1: "https://en.wikipedia.org/wiki/Pyramid_of_the_Sun",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-98.8435, 19.6923]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Moai",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740424674/moaistatuemapicon_thvhs5.svg",
+        link1: "https://en.wikipedia.org/wiki/Moai",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-109.28472221615417, -27.125902031500438]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Mount Rushmore",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740425389/mountrushmoremapicon_t7rwhr.svg",
+        link1: "https://en.wikipedia.org/wiki/Mount_Rushmore",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-103.4538, 43.8803]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Naryn-Kala Citadel",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740427215/narynkalacitadelmapicon_gg65fa.svg",
+        link1: "https://en.wikipedia.org/wiki/Naryn-Kala",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [48.2751, 42.0532]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Göbekli Tepe",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740429465/gobeklitepemapicon_nj5rsv.svg",
+        link1: "https://en.wikipedia.org/wiki/G%C3%B6bekli_Tepe",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [38.92182097116415, 37.2233699615809]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Abu Simbel",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740430520/abusimbelmapicon_vwj6iw.svg",
+        link1: "https://en.wikipedia.org/wiki/Abu_Simbel",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [31.6258, 22.3372]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Aït Benhaddou",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740434934/aitbenhaddoumapicon_usngo4.svg",
+        link1: "https://en.wikipedia.org/wiki/A%C3%AFt_Benhaddou",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [-7.1319, 31.0470]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Leptis Magna Theatre",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740440631/leptismagnamapicon_qotcge.svg",
+        link1: "https://en.wikipedia.org/wiki/Leptis_Magna",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [14.2948, 32.6343]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Angkor Wat",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740441732/angkorwatmapicon_nxgyqz.svg",
+        link1: "https://en.wikipedia.org/wiki/Angkor_Wat",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [103.84736080332256, 13.547425631858554]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Agadez Mosque",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740452507/agadezmosquemapicon_w68vth.svg",
+        link1: "https://en.wikipedia.org/wiki/Agadez_Mosque",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [7.98530535121999, 17.06794166654295]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Hagia Sophia",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740442680/hagiasophiamapicon_dbyfnd.svg",
+        link1: "https://en.wikipedia.org/wiki/Hagia_Sophia",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [28.9802, 41.0086]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Ziggurat",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740452521/zigguratmapicon_drvbjt.svg",
+        link1: "https://en.wikipedia.org/wiki/Ziggurat",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [46.10316707116415, 30.96291119982689]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Great Zimbabwe",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740502659/greatzimbabwemapicon_apuj9r.svg",
+        link1: "https://en.wikipedia.org/wiki/Great_Zimbabwe",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [30.934266756599822, -20.27275006229729]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Solovetsky Monastery",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740505417/solovetskymonasterymapicon_nul4s6.svg",
+        link1: "https://en.wikipedia.org/wiki/Solovetsky_Monastery#:~:text=The%20Solovetsky%20Monastery%20was%20founded,first%20hegumen%20of%20the%20monastery.",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [35.709632985992826, 65.02495505618649]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Genghis Khaan Statue Complex",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740507261/chinggiskhanstatuecomplexmapicon_fs6mft.svg",
+        link1: "https://en.wikipedia.org/wiki/Equestrian_statue_of_Genghis_Khan",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [107.52978221349245, 47.808280124129666]
+      }
+    },
+    {
+      type: "Feature",
+      properties: {
+        name: "Alexander the Great",
+        iconUrl: "https://res.cloudinary.com/dwgeznr2w/image/upload/v1740266071/alexanderthegreatmapicon_rem4ry.svg",
+        link1: "https://en.wikipedia.org/wiki/Alexander_the_Great",
+        link2: "https://example.com/egyptian-history"
+      },
+      geometry: {
+        type: "Point",
+        coordinates: [22.949950906746626, 40.62407818740788]
+      }
+    },
+  ]
+};
+
+let historicalIconsVisible = false;
+let historicalMarkers = [];  // Array to store the historical markers
+
+// Function to toggle the visibility of historical icons
+function toggleHistoricalIcons() {
+  historicalIconsVisible = !historicalIconsVisible;
+
+  const zoomLevel = map.getZoom();
+
+  if (historicalIconsVisible) {
+    historicalGeoJSON.features.forEach(feature => {
+      const marker = new mapboxgl.Marker({
+        element: createIcon(feature.properties.iconUrl, zoomLevel)
+      })
+        .setLngLat(feature.geometry.coordinates)
+        .addTo(map);
+
+      // Create popup for the marker
+      marker.setPopup(createHistoricalPopup(feature));
+
+      // Add the marker to the array
+      historicalMarkers.push(marker);
+
+      // Add event listener for flying to the marker when clicked
+      marker.getElement().addEventListener('click', () => {
+        map.flyTo({
+          center: feature.geometry.coordinates,  // Fly to the historical marker's coordinates
+          zoom: 8,  // Adjust zoom level as needed
+          essential: true
+        });
+      });
+    });
+  } else {
+    // If toggling OFF, remove the markers and reset
+    historicalMarkers.forEach(marker => {
+      marker.remove();
+    });
+    historicalMarkers = []; // Clear the array of markers
+  }
+}
+
+// Create a custom icon for the historical markers
+function createIcon(iconUrl, zoomLevel) {
+  const icon = document.createElement('div');
+  icon.className = 'custom-icon';
+  icon.style.backgroundImage = `url(${iconUrl})`;
+  icon.style.backgroundSize = 'cover';
+
+  // Dynamically set the width and height based on the zoom level
+  const size = Math.min(Math.max(zoomLevel / 5, 0.5), 2) * 120; // base size of 120px, scale based on zoom level
+
+  // Apply calculated size for the icon
+  icon.style.width = `${size}px`;
+  icon.style.height = `${size}px`;
+
+  return icon;
+}
+
+// Add historical markers with the dynamic icon size based on zoom level
+function addHistoricalMarkers() {
+  const zoomLevel = map.getZoom(); // Get current zoom level
+  
+  historicalGeoJSON.features.forEach(feature => {
+    const icon = createIcon(feature.properties.iconUrl, zoomLevel); // Pass zoom level
+
+    const marker = new mapboxgl.Marker({ element: icon })
+      .setLngLat(feature.geometry.coordinates)
+      .addTo(map);
+
+    // Create popup for the marker
+    marker.setPopup(createHistoricalPopup(feature));
+    historicalMarkers.push(marker);
+  });
+}
+
+// Create a Mapbox Popup for the historical marker
+function createHistoricalPopup(historical) {
+  const popup = new mapboxgl.Popup({
+    offset: 120,
+    closeOnClick: false,
+    closeButton: false
+  })
+    .setLngLat(historical.geometry.coordinates)
+    .setHTML(`
+      <h3 style="color: #00d4ff; font-size: 1em; margin-bottom: 5px 0 10px 0;">${historical.properties.name}</h3>
+      <a href="${historical.properties.link1}" target="_blank" style="color: #FFFFFF; text-decoration: none; font-weight: bold; font-size: 1.5em; margin-bottom: -5px">
+        Learn
+      </a>
+      <br> <!-- Line break for spacing -->
+      <a href="${historical.properties.link2}" target="_blank" style="color: #FFD700; text-decoration: none; font-weight: bold; font-size: 1.5em; margin-bottom: 10px;">
+        Shop Art
+      </a>
+    `);
+
+  return popup;
+}
+
+// Generic handler to close popups when clicking outside markers
+map.on('click', (e) => {
+  if (!e.originalEvent.target.closest('.mapboxgl-marker')) {
+    document.querySelectorAll('.mapboxgl-popup').forEach((popupElement) => {
+      popupElement.remove();
+    });
+  }
+});
+
+// Event listener for zooming to adjust marker sizes
+map.on('zoom', () => {
+  const zoomLevel = map.getZoom(); // Get current zoom level
+  
+  // Adjust marker sizes based on the zoom level
+  historicalMarkers.forEach(marker => {
+    const iconElement = marker.getElement();  // Get the marker's element
+
+    // Dynamically calculate scale factor based on zoom level
+    const scale = Math.min(Math.max(zoomLevel / 5, 0.5), 2); // Scale factor (clamped between 0.5 and 2)
+    
+    // Adjust the size of the marker's icon (not using scale transform)
+    const size = 200 * scale;
+
+    // Apply the size directly to the marker's icon element
+    iconElement.style.width = `${size}px`;
+    iconElement.style.height = `${size}px`;
+  });
+});
+
+</script>
+</body>
+</html>
